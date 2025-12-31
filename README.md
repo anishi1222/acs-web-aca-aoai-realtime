@@ -185,6 +185,46 @@ cd server && ./.venv/bin/python -m compileall -q .
 ./startup_web.sh
 ```
 
+### （補足）localhost ではなくローカル IP で Web UI を開く
+
+別PC/スマホ等から同一LAN内で Web UI を開きたい場合、`http://localhost:5173` ではなく
+`http://<このPCのIP>:5173`（例: `http://172.16.0.10:5173`）でアクセスします。
+
+ポイントは2つです。
+
+1) Vite 開発サーバーを LAN から見えるように起動する
+
+`startup_web.sh` は通常どおり使えますが、Vite は既定で localhost バインドのことがあるため、
+必要に応じて `--host 0.0.0.0` を付けて起動してください。
+
+```bash
+cd web
+npm run dev -- --host 0.0.0.0 --port 5173
+```
+
+その後、別端末のブラウザで `http://<このPCのIP>:5173` を開きます。
+
+2) `/api/token` が失敗する場合は「API の向き先」を確認する
+
+このリポジトリは Vite の proxy により、Web UI からの `/api/*` アクセスを
+同じPC上の `http://localhost:8000`（サーバー）へ中継します。
+
+- Web UI を `http://<このPCのIP>:5173` で開く場合も、基本は **`VITE_API_BASE` を未設定**にして
+  **Vite proxy 経由**で `/api/token` を呼ぶのが安全です（CORS 回避）。
+- もし `web/.env.local` 等で `VITE_API_BASE=http://localhost:8000` を設定していると、
+  **別端末からアクセスした場合に「別端末自身の localhost」** を参照してしまい `token error` になります。
+  この場合は `VITE_API_BASE` を削除するか、どうしても直指定したい場合は
+  `VITE_API_BASE=http://<このPCのIP>:8000` にしてください。
+
+注意: `VITE_API_BASE` で別オリジン（例: `http://<IP>:8000`）へ直接アクセスする場合、
+ブラウザの CORS 制約により FastAPI 側に CORS 設定が必要になることがあります。
+ローカル検証では **Vite proxy を使う（= `VITE_API_BASE` 未設定）** のが一番トラブルが少ないです。
+
+補足（重要）:
+- ここで説明している「ローカルIPで UI を開く」は、あくまで **LAN内のブラウザ表示**の話です。
+  ACS の Callback / Media Streaming は Azure から到達できる必要があるため、
+  `CALLBACK_URI_HOST` は引き続き `devtunnel/ngrok/cloudflared` などで作った **https の公開URL**を使ってください。
+
 ### 4. UI を開く
 
 - ブラウザで http://localhost:5173 を開き、一番下の【ローカル検証】をクリックする。これにより、ユーザーIDが自動生成される。右上の【idle】【Call: idle】を確認する。
@@ -193,7 +233,7 @@ cd server && ./.venv/bin/python -m compileall -q .
 
 ### 5. 初期化
 
-- 【Init (Token)】をクリックして、ACS User IDを自動発行させる。クリックすると、緑で囲んだ箇所のようにIDが現れ、【Server Start】のボタンがクリックできるようになる。右上の【agent ready】も確認しておく。
+- 【Init (Token)】をクリックして、ACS User IDを自動発行させる。クリックすると、IDが現れ、【Server Start】のボタンがクリックできるようになる。右上の【agent ready】も確認しておく。
 
 ![alt text](image2.png)
 
@@ -215,12 +255,9 @@ cd server && ./.venv/bin/python -m compileall -q .
 ### 8. 通話終了
 
 - 【Hang Up】をクリックすると、通話を終了できる。
-
-![alt text](image5.png)
-
 - 通話が終了すると、右上のステータスが【stopped】【Call: Disconnected】に変わり、右下の着信ステータスは【Incoming: none】に変わる。
 
-![alt text](image6.png)
+![alt text](image5.png)
 
 ## 4. Web UI を Docker イメージで起動 (non-root)
 

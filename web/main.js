@@ -16,6 +16,28 @@ async function apiFetch(path, options) {
   return fetch(url, options);
 }
 
+async function apiJson(path, options) {
+  const response = await apiFetch(path, options);
+  const contentType = response.headers.get("content-type") || "";
+
+  let payload;
+  if (contentType.includes("application/json")) {
+    payload = await response.json().catch(() => null);
+  } else {
+    payload = await response.text().catch(() => "");
+  }
+
+  if (!response.ok) {
+    const serverError = payload && typeof payload === "object" ? payload.error : null;
+    const serverDetails = payload && typeof payload === "object" ? payload.details : null;
+    const fallback = typeof payload === "string" && payload ? payload : `HTTP ${response.status}`;
+    const message = serverError ? String(serverError) : fallback;
+    const detailSuffix = serverDetails ? ` (${serverDetails})` : "";
+    throw new Error(`${message}${detailSuffix}`);
+  }
+  return payload;
+}
+
 const statusEl = document.getElementById("status");
 const statusDot = document.getElementById("statusDot");
 const wsStateEl = document.getElementById("wsState"); // Reusing this element for Call state
@@ -51,9 +73,7 @@ async function initCallAgent() {
 
   try {
     setStatus("fetching token...", "warn");
-    const response = await apiFetch("/api/token");
-    if (!response.ok) throw new Error("Failed to fetch token");
-    const data = await response.json();
+    const data = await apiJson("/api/token");
 
     currentUserId = data.userId;
     if (myUserIdInput) myUserIdInput.value = currentUserId;
@@ -78,7 +98,9 @@ async function initCallAgent() {
     setStatus("agent ready", "ok");
   } catch (error) {
     console.error(error);
-    setStatus("token error", "bad");
+    const msg = String(error?.message || error);
+    const isNetworkish = /Failed to fetch|NetworkError|ECONNREFUSED/i.test(msg);
+    setStatus(isNetworkish ? "token error: API unreachable (start server on :8000)" : `token error: ${msg}`, "bad");
     throw error;
   }
 }

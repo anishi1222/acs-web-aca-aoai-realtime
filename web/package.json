@@ -1,0 +1,18 @@
+{
+  "name": "acs-web-to-aca-to-aoai-realtime",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173"
+  },
+  "dependencies": {
+    "@azure/communication-calling": "^1.40.1",
+    "@azure/communication-common": "^2.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

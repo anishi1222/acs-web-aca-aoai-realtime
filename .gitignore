@@ -1,0 +1,17 @@
+# Local environment / secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[oc]
+
+# Node
+node_modules/
+
+# Build outputs
+build/
+dist/
+
+# Misc
+*.md.ignore

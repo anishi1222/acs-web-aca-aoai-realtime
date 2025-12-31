@@ -1,0 +1,252 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Realtime Voice Assistant</title>
+  <style>
+    :root {
+      --bg1: #0b1020;
+      --bg2: #101a33;
+      --card: rgba(255, 255, 255, 0.08);
+      --card2: rgba(255, 255, 255, 0.12);
+      --text: rgba(255, 255, 255, 0.92);
+      --muted: rgba(255, 255, 255, 0.65);
+      --accent: #7c5cff;
+      --accent2: #35d0ff;
+      --ok: #31d07e;
+      --warn: #ffcc66;
+      --bad: #ff5c7a;
+      --shadow: 0 18px 50px rgba(0,0,0,0.45);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 15% 10%, rgba(124,92,255,0.35), transparent 60%),
+                  radial-gradient(1000px 700px at 85% 30%, rgba(53,208,255,0.25), transparent 55%),
+                  linear-gradient(180deg, var(--bg1), var(--bg2));
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px 16px;
+    }
+
+    .wrap { width: min(920px, 100%); }
+    .header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0;
+      letter-spacing: 0.3px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--card), rgba(255,255,255,0.05));
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card .row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      padding: 16px;
+      align-items: center;
+    }
+
+    @media (max-width: 720px) {
+      .card .row { grid-template-columns: 1fr; }
+      .buttons { justify-content: stretch; }
+      .buttons button { width: 100%; }
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 0 0 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      outline: none;
+    }
+    input:focus {
+      border-color: rgba(124,92,255,0.65);
+      box-shadow: 0 0 0 4px rgba(124,92,255,0.18);
+    }
+
+    .buttons { display: flex; gap: 10px; justify-content: flex-end; }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-weight: 650;
+      color: rgba(255,255,255,0.95);
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.18);
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+      user-select: none;
+    }
+    button:hover { transform: translateY(-1px); background: rgba(255,255,255,0.14); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .primary {
+      background: linear-gradient(135deg, rgba(124,92,255,0.92), rgba(53,208,255,0.80));
+      border-color: rgba(255,255,255,0.16);
+    }
+    .primary:hover { background: linear-gradient(135deg, rgba(124,92,255,1), rgba(53,208,255,0.95)); }
+
+    .danger {
+      background: rgba(255, 92, 122, 0.20);
+      border-color: rgba(255, 92, 122, 0.28);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.16);
+    }
+
+    details {
+      border-top: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.10);
+      padding: 10px 16px 14px;
+    }
+    summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      list-style: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    .supplement {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+    textarea {
+      width: 100%;
+      min-height: 56px;
+      resize: vertical;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      outline: none;
+    }
+    textarea:focus {
+      border-color: rgba(124,92,255,0.65);
+      box-shadow: 0 0 0 4px rgba(124,92,255,0.18);
+    }
+    .ghost {
+      background: rgba(255,255,255,0.08);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(255,204,102,0.15);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1>Realtime Voice Assistant</h1>
+        <div class="subtitle">WebSocket → Azure OpenAI Realtime（音声入出力）</div>
+      </div>
+      <div class="pill"><span class="dot" id="statusDot"></span><span id="status">idle</span></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="calleeId">Target Identity (ACS User ID / Bot ID)</label>
+          <input id="calleeId" placeholder="8:acs:..." />
+        </div>
+        <div class="buttons">
+          <button id="btnCall" class="primary">Start Call</button>
+          <button id="btnHangup" class="danger">Hang Up</button>
+        </div>
+      </div>
+      <div class="status">
+        <div class="subtitle">ヒント: まず Mic を ON → 返答中に被せて話すと音声カットインします。</div>
+        <div class="subtitle" id="wsState">WS: disconnected</div>
+      </div>
+
+      <details>
+        <summary>補足（任意）: 返答の途中/直後に追記したい内容を送れます</summary>
+        <div class="supplement">
+          <textarea id="supplementText" placeholder="例）補足です。条件は◯◯でお願いします。"></textarea>
+          <button id="btnSupplement" class="ghost">送信</button>
+        </div>
+      </details>
+
+      <details>
+        <summary>ローカル検証（おすすめ）: Server が先に発信 → ブラウザで着信を Accept</summary>
+        <div class="row" style="padding-top: 12px;">
+          <div>
+            <label for="myUserId">My ACS User ID（自動発行）</label>
+            <input id="myUserId" placeholder="(Init を押すと表示されます)" readonly />
+          </div>
+          <div class="buttons">
+            <button id="btnInit" class="ghost">Init (Token)</button>
+            <button id="btnServerCall" class="primary" disabled>Server Start</button>
+            <button id="btnAccept" class="ghost" disabled>Accept</button>
+          </div>
+        </div>
+        <div class="status" style="border-top: 0; background: transparent; padding-top: 0;">
+          <div class="subtitle">Event Grid の IncomingCall ルーティング無しで検証できます（ただし server の CALLBACK_URI_HOST は公開URLが必要です）。</div>
+          <div class="subtitle" id="incomingState">Incoming: none</div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

@@ -1,5 +1,4 @@
-
-import os, time, asyncio, json
+import os, asyncio, json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -7,7 +6,6 @@ from azure.communication.identity import CommunicationIdentityClient
 from azure.core.exceptions import ClientAuthenticationError
 from azure.communication.callautomation import (
     CallAutomationClient,
-    ServerCallLocator,
     MediaStreamingOptions,
     StreamingTransportType,
     MediaStreamingContentType,
@@ -181,12 +179,12 @@ def _media_streaming_options() -> MediaStreamingOptions:
 
 
 def _parse_acs_events(body: bytes) -> list[dict]:
-  """Parse ACS Call Automation webhook payloads.
+  """Parse ACS Call Automation webhook/callback payloads.
 
   The Python SDK no longer exposes CallAutomationEventParser in some versions.
   This keeps us compatible by parsing common JSON shapes:
-  - Event Grid style: a JSON array of event objects
-  - CloudEvents style: a single JSON object, sometimes wrapped in {"value": [...]}.
+  - a JSON array of event objects
+  - a single JSON object, sometimes wrapped in {"value": [...]}.
   """
   try:
     payload = json.loads(body.decode("utf-8"))
@@ -211,39 +209,9 @@ def _parse_acs_events(body: bytes) -> list[dict]:
     normalized.append({"type": ev_type, "data": data, "raw": ev})
   return normalized
 
-@app.post("/api/incomingCall")
-async def incoming_call_handler(request: Request):
-    if not call_automation_client:
-        return JSONResponse({"error": "ACS not configured"}, status_code=500)
-    
-    # Parse the incoming event
-    events = _parse_acs_events(await request.body())
-    for event in events:
-      if event.get("type") == "Microsoft.Communication.IncomingCall":
-        incoming_call_context = (event.get("data") or {}).get("incomingCallContext")
-        if not incoming_call_context:
-          continue
-
-        try:
-          media_streaming_options = _media_streaming_options()
-          callback_url = f"{_require_callback_uri_host()}/api/callbacks"
-
-          await asyncio.to_thread(
-            call_automation_client.answer_call,
-            incoming_call_context=incoming_call_context,
-            callback_url=callback_url,
-            media_streaming=media_streaming_options,
-          )
-          print(f"Answered call with media streaming to {_ws_transport_url()}")
-        except Exception as e:
-          print(f"Failed to answer call: {e}")
-          return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
-
-    return JSONResponse({"status": "ok"})
-
 @app.post("/api/callbacks")
 async def call_automation_callback(request: Request):
-    # Handle other call automation events if needed (e.g. CallConnected, CallDisconnected)
+  # Handles Call Automation callback events emitted for server-initiated calls.
   events = _parse_acs_events(await request.body())
   for event in events:
     ev_type = event.get("type")
@@ -316,8 +284,7 @@ async def start_server_call(payload: StartServerCallRequest):
   """Server-initiated outbound call.
 
   Local/on-prem testing tip:
-  - This avoids the need for Event Grid routing to /api/incomingCall.
-  - But ACS still needs to reach this server for callbacks and WS media streaming,
+  - ACS still needs to reach this server for callbacks and WS media streaming,
     so CALLBACK_URI_HOST must be a publicly reachable https:// URL.
   """
   if not call_automation_client:

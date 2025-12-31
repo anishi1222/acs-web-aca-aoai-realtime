@@ -5,7 +5,6 @@ build/
 dist/
 wheels/
 *.egg-info
-uv.lock
 
 # Virtual environments
 .venv
@@ -13,6 +12,9 @@ uv.lock
 # Local secrets
 .env
 .env.*
+
+# Keep example env files (safe to commit)
+!.env.example
 
 # Others
 *.md.ignore

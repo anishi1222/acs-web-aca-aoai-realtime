@@ -7,6 +7,7 @@ let call;
 let isCallConnected = false;
 let incomingCall;
 let currentUserId;
+let deviceManager;
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -18,11 +19,9 @@ async function apiFetch(path, options) {
 const statusEl = document.getElementById("status");
 const statusDot = document.getElementById("statusDot");
 const wsStateEl = document.getElementById("wsState"); // Reusing this element for Call state
-const btnCall = document.getElementById("btnCall");
 const btnHangup = document.getElementById("btnHangup");
 const btnSupplement = document.getElementById("btnSupplement");
 const supplementText = document.getElementById("supplementText");
-const calleeIdInput = document.getElementById("calleeId");
 
 const myUserIdInput = document.getElementById("myUserId");
 const btnInit = document.getElementById("btnInit");
@@ -61,6 +60,13 @@ async function initCallAgent() {
     
     const credential = new AzureCommunicationTokenCredential(data.token);
     callClient = new CallClient();
+    deviceManager = await callClient.getDeviceManager();
+    try {
+      // Without this, the call can connect but the user may not be able to speak.
+      await deviceManager.askDevicePermission({ audio: true });
+    } catch (e) {
+      console.warn("Mic permission not granted", e);
+    }
     callAgent = await callClient.createCallAgent(credential, { displayName: "Web Client" });
 
     callAgent.on("incomingCall", (args) => {
@@ -84,6 +90,7 @@ async function acceptIncoming() {
   }
   try {
     setStatus("accepting...", "warn");
+    // Best-effort: accept with audio enabled.
     call = await incomingCall.accept();
     incomingCall = null;
     if (btnAccept) btnAccept.disabled = true;
@@ -94,13 +101,19 @@ async function acceptIncoming() {
       if (call.state === "Connected") {
         setStatus("connected", "ok");
         isCallConnected = true;
-        btnCall.disabled = true;
+        try {
+          // Ensure we are not muted on connect.
+          if (typeof call.isMuted === "boolean" ? call.isMuted : false) {
+            call.unmute();
+          }
+        } catch {
+          // Ignore if not supported.
+        }
         btnHangup.disabled = false;
         if (btnServerCall) btnServerCall.disabled = true;
       } else if (call.state === "Disconnected") {
         setStatus("disconnected", "warn");
         isCallConnected = false;
-        btnCall.disabled = false;
         btnHangup.disabled = true;
         if (btnServerCall) btnServerCall.disabled = false;
         call = null;
@@ -141,70 +154,18 @@ async function serverStartCall() {
   }
 }
 
-async function startCall() {
-  const calleeId = calleeIdInput.value.trim();
-  if (!calleeId) {
-    alert("Please enter a Target Identity");
-    return;
-  }
-
-  try {
-    await initCallAgent();
-    
-    setStatus("calling...", "warn");
-    
-    // Determine if it's a User or Bot ID based on format (simple heuristic)
-    // 8:acs:... is usually a user. 
-    // But for simplicity, we'll try to parse it or just use communicationUserId.
-    // If the user inputs a raw ID, we wrap it.
-    
-    let target;
-    if (calleeId.startsWith("8:acs:")) {
-        target = { communicationUserId: calleeId };
-    } else {
-        // Fallback or other types. 
-        target = { communicationUserId: calleeId };
-    }
-
-    call = callAgent.startCall([target]);
-    
-    call.on("stateChanged", () => {
-      setCallState(call.state);
-      if (call.state === "Connected") {
-        setStatus("connected", "ok");
-        isCallConnected = true;
-        btnCall.disabled = true;
-        btnHangup.disabled = false;
-      } else if (call.state === "Disconnected") {
-        setStatus("disconnected", "warn");
-        isCallConnected = false;
-        btnCall.disabled = false;
-        btnHangup.disabled = true;
-        call = null;
-      }
-    });
-
-  } catch (error) {
-    console.error(error);
-    setStatus("call failed", "bad");
-  }
-}
-
 async function hangUp() {
   if (call) {
     await call.hangUp();
     call = null;
   }
   isCallConnected = false;
-  btnCall.disabled = false;
   btnHangup.disabled = true;
   if (btnServerCall) btnServerCall.disabled = false;
   if (btnAccept) btnAccept.disabled = true;
   setIncomingState("none");
   setStatus("stopped", "warn");
 }
-
-btnCall.onclick = startCall;
 btnHangup.onclick = hangUp;
 
 if (btnInit) {

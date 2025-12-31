@@ -203,16 +203,6 @@
     </div>
 
     <div class="card">
-      <div class="row">
-        <div>
-          <label for="calleeId">Target Identity (ACS User ID / Bot ID)</label>
-          <input id="calleeId" placeholder="8:acs:..." />
-        </div>
-        <div class="buttons">
-          <button id="btnCall" class="primary">Start Call</button>
-          <button id="btnHangup" class="danger">Hang Up</button>
-        </div>
-      </div>
       <div class="status">
         <div class="subtitle">ヒント: まず Mic を ON → 返答中に被せて話すと音声カットインします。</div>
         <div class="subtitle" id="wsState">WS: disconnected</div>
@@ -237,10 +227,11 @@
             <button id="btnInit" class="ghost">Init (Token)</button>
             <button id="btnServerCall" class="primary" disabled>Server Start</button>
             <button id="btnAccept" class="ghost" disabled>Accept</button>
+            <button id="btnHangup" class="danger" disabled>Hang Up</button>
           </div>
         </div>
         <div class="status" style="border-top: 0; background: transparent; padding-top: 0;">
-          <div class="subtitle">Event Grid の IncomingCall ルーティング無しで検証できます（ただし server の CALLBACK_URI_HOST は公開URLが必要です）。</div>
+          <div class="subtitle">Server が自分へ発信 → ブラウザで着信を Accept して検証します（CALLBACK_URI_HOST は公開URLが必要です）。</div>
           <div class="subtitle" id="incomingState">Incoming: none</div>
         </div>
       </details>

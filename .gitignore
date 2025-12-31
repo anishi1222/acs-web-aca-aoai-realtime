@@ -2,6 +2,10 @@
 .env
 .env.*
 
+# Keep example env files (safe to commit)
+!.env.example
+!**/.env.example
+
 # Python
 __pycache__/
 *.py[oc]

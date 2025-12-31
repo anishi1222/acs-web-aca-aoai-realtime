@@ -6,6 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Needed for outbound TLS (Azure/OpenAI over https/wss).
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
 # Create an unprivileged user to run the server.
 RUN groupadd -g 10001 app && \
 	useradd -r -u 10001 -g app -m -d /home/app app
@@ -20,21 +25,4 @@ USER app
 
 EXPOSE 8000
 
-CMD [
-	"uvicorn",
-	"app:app",
-	"--host",
-	"0.0.0.0",
-	"--port",
-	"8000",
-	"--ws",
-	"websockets",
-	"--ws-max-size",
-	"0",
-	"--ws-per-message-deflate",
-	"false",
-	"--ws-ping-interval",
-	"20",
-	"--ws-ping-timeout",
-	"20"
-]
+CMD ["python", "app.py"]

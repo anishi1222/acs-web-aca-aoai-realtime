@@ -2,6 +2,7 @@ import os, asyncio, json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from azure.communication.identity import CommunicationIdentityClient
 from azure.core.exceptions import ClientAuthenticationError
 from azure.communication.callautomation import (
@@ -19,6 +20,31 @@ except Exception:
   AudioFormat = None  # type: ignore
 
 app = FastAPI()
+
+# CORS
+# - Needed when serving the web UI from a different origin (e.g. Docker nginx :8080)
+#   and calling the API on :8000.
+# - For local/dev convenience we allow localhost and typical private LAN IPs.
+cors_allow_origins = [
+  o.strip() for o in (os.getenv("CORS_ALLOW_ORIGINS") or "").split(",") if o.strip()
+]
+
+if cors_allow_origins:
+  app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_allow_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+  )
+else:
+  app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^http://(localhost|127\\.0\\.0\\.1|\\d{1,3}(?:\\.\\d{1,3}){3})(?::\\d+)?$",
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+  )
 
 
 # --- Env / config ---

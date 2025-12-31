@@ -35,6 +35,13 @@ async function apiJson(path, options) {
     const detailSuffix = serverDetails ? ` (${serverDetails})` : "";
     throw new Error(`${message}${detailSuffix}`);
   }
+
+  // Guard against SPA fallback (e.g., nginx serving index.html for /api/*).
+  if (!contentType.includes("application/json") || !payload || typeof payload !== "object") {
+    throw new Error(
+      "API returned non-JSON. If you are using the Dockerized web container, set VITE_API_BASE at build time (or add a reverse proxy for /api)."
+    );
+  }
   return payload;
 }
 
@@ -74,6 +81,10 @@ async function initCallAgent() {
   try {
     setStatus("fetching token...", "warn");
     const data = await apiJson("/api/token");
+
+    if (!data.token || !data.userId) {
+      throw new Error("Invalid /api/token response (missing token/userId)");
+    }
 
     currentUserId = data.userId;
     if (myUserIdInput) myUserIdInput.value = currentUserId;

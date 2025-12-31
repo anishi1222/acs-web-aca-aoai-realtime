@@ -265,8 +265,17 @@ npm run dev -- --host 0.0.0.0 --port 5173
 
 ```bash
 cd web
+# 方式A（推奨）: nginx が /api/* をリバースプロキシします（同一オリジン扱いになり CORS 回避）
 docker build -t acs-aoai-realtime-web:nonroot .
-docker run --rm -p 8080:8080 acs-aoai-realtime-web:nonroot
+
+# Linux の場合 host.docker.internal が無いので host-gateway を追加します
+docker run --rm -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e API_UPSTREAM=http://host.docker.internal:8000 \
+  acs-aoai-realtime-web:nonroot
+
+# 方式B（任意）: API を別オリジン（例: http://localhost:8000）で叩く場合は build 時に VITE_API_BASE を埋め込みます
+# docker build --build-arg VITE_API_BASE=http://localhost:8000 -t acs-aoai-realtime-web:nonroot .
 ```
 
 - ブラウザ: `http://localhost:8080/`
@@ -288,5 +297,9 @@ docker run --rm -p 8000:8000 \
   -e AZURE_OPENAI_API_KEY=... \
   -e AOAI_VOICE=... \
   -e CALLBACK_URI_HOST=... \
+  -e CORS_ALLOW_ORIGINS=http://localhost:8080,http://127.0.0.1:8080 \
   acs-aoai-realtime-server:nonroot
 ```
+
+注意:
+- README やシェル履歴に **接続文字列/キーを貼り付けない**でください。漏洩した可能性がある場合は必ずキーをローテーションしてください。

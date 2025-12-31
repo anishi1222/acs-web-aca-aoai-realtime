@@ -265,8 +265,8 @@ npm run dev -- --host 0.0.0.0 --port 5173
 
 ```bash
 cd web
-docker build -t aoai-realtime-web:nonroot .
-docker run --rm -p 8080:8080 aoai-realtime-web:nonroot
+docker build -t acs-aoai-realtime-web:nonroot .
+docker run --rm -p 8080:8080 acs-aoai-realtime-web:nonroot
 ```
 
 - ブラウザ: `http://localhost:8080/`
@@ -278,7 +278,7 @@ docker run --rm -p 8080:8080 aoai-realtime-web:nonroot
 
 ```bash
 cd server
-docker build -t aoai-realtime-server:nonroot .
+docker build -t acs-aoai-realtime-server:nonroot .
 
 # 必要な環境変数を渡して起動（値は自分の環境に合わせて設定）
 docker run --rm -p 8000:8000 \
@@ -288,5 +288,5 @@ docker run --rm -p 8000:8000 \
   -e AZURE_OPENAI_API_KEY=... \
   -e AOAI_VOICE=... \
   -e CALLBACK_URI_HOST=... \
-  aoai-realtime-server:nonroot
+  acs-aoai-realtime-server:nonroot
 ```

@@ -38,6 +38,11 @@ except Exception as e:
   AOAIRealtime = None  # type: ignore
   _AOAI_IMPORT_ERROR = {"error": repr(e), "trace": traceback.format_exc()}
 
+try:
+  from foundry_agent import FoundryWebGroundingAgent
+except Exception:
+  FoundryWebGroundingAgent = None  # type: ignore
+
 HOST = os.getenv("MEDIA_WS_HOST", "0.0.0.0")
 PORT = int(os.getenv("MEDIA_WS_PORT", "8765"))
 
@@ -92,6 +97,14 @@ LOG_AUDIO_STATS_INTERVAL_MS = int(os.getenv("MEDIA_WS_LOG_AUDIO_STATS_INTERVAL_M
 # Debug: log assistant output transcript (when the Realtime service emits transcript events).
 # Useful for validating what the assistant said even when output modality is audio.
 LOG_AOAI_OUTPUT_TRANSCRIPT = _env_bool("MEDIA_WS_LOG_AOAI_OUTPUT_TRANSCRIPT", True)
+
+# Foundry Agent (Web grounding)
+_AGENT_CONFIG_PRESENT = bool(os.getenv("AZURE_AI_PROJECT_ENDPOINT") and os.getenv("AZURE_AI_AGENT_ID")) or bool(
+  os.getenv("AZURE_FOUNDRY_PROJECT_ENDPOINT") and os.getenv("AZURE_FOUNDRY_AGENT_ID")
+)
+ENABLE_AGENT = _env_bool("MEDIA_WS_AGENT_ENABLE", _AGENT_CONFIG_PRESENT)
+AGENT_TIMEOUT_MS = int(os.getenv("MEDIA_WS_AGENT_TIMEOUT_MS", "2000"))
+AGENT_FAILURE_PREFIX = os.getenv("MEDIA_WS_AGENT_FALLBACK_PREFIX", "今は検索できないので一般知識で答えます")
 
 # Barge-in: if the user's speech contains these phrases, cancel the current AOAI response.
 # Comma-separated list. Default is intentionally narrow to avoid false positives.
@@ -160,10 +173,15 @@ class StreamState:
   aoai_inflight: bool = False
   aoai_pending_commit_task: asyncio.Task | None = None
   aoai_pump_task: asyncio.Task | None = None
+  aoai_supervisor_task: asyncio.Task | None = None
   aoai_to_acs_rate_state: object | None = None
   aoai_out_buf: bytearray = field(default_factory=bytearray)
   drop_aoai_audio_until_ms: int = 0
   aoai_out_transcript_buf: list[str] = field(default_factory=list)
+  closed: asyncio.Event = field(default_factory=asyncio.Event)
+  agent: object | None = None
+  agent_inflight: bool = False
+  agent_last_query_ms: int = 0
 
 
 def _normalize_jp(text: str) -> str:
@@ -311,12 +329,150 @@ async def _connect_aoai(state: StreamState):
     rt = AOAIRealtime()
     await rt.connect()
     state.aoai = rt
-    print("AOAI connected", {"callConnectionId": state.call_connection_id, "ts": _now_ms()})
+    print(
+      "AOAI connected",
+      {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id, "ts": _now_ms()},
+    )
   except Exception as e:
-    print("AOAI connect failed", {"callConnectionId": state.call_connection_id, "error": repr(e)})
+    print(
+      "AOAI connect failed",
+      {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id, "error": repr(e)},
+    )
     state.aoai = None
   finally:
     state.aoai_ready.set()
+
+
+async def _aoai_supervisor(state: StreamState):
+  """Keep AOAI realtime connected; retry without dropping the call.
+
+  This loop is best-effort. It keeps trying to connect and run the pump until the ACS WS closes.
+  """
+  backoff_ms = 500
+  while not state.closed.is_set():
+    # If we already have a live pump, just wait.
+    if state.aoai is not None and state.aoai_pump_task is not None and not state.aoai_pump_task.done():
+      try:
+        await asyncio.wait_for(state.closed.wait(), timeout=1.0)
+      except Exception:
+        pass
+      continue
+
+    # Reset readiness for a fresh attempt.
+    state.aoai_ready.clear()
+    await _connect_aoai(state)
+
+    rt = state.aoai
+    if rt is None:
+      # Retry with backoff.
+      try:
+        await asyncio.wait_for(state.closed.wait(), timeout=backoff_ms / 1000.0)
+        continue
+      except Exception:
+        pass
+      backoff_ms = min(int(backoff_ms * 1.8), 8000)
+      continue
+
+    # Connected: start pump, then wait until it ends (or socket closes).
+    try:
+      state.aoai_pump_task = asyncio.create_task(_aoai_pump(state))
+      await asyncio.wait(
+        [state.aoai_pump_task, asyncio.create_task(state.closed.wait())],
+        return_when=asyncio.FIRST_COMPLETED,
+      )
+    finally:
+      # Ensure ws is closed so the next loop does a clean reconnect.
+      try:
+        await rt.close()
+      except Exception:
+        pass
+      state.aoai = None
+      backoff_ms = 500
+
+
+async def _ensure_agent(state: StreamState):
+  if not ENABLE_AGENT:
+    state.agent = None
+    return
+  if state.agent is not None:
+    return
+  if FoundryWebGroundingAgent is None:
+    state.agent = None
+    print(
+      "Foundry agent SDK not available; grounding disabled",
+      {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id},
+    )
+    return
+  try:
+    state.agent = FoundryWebGroundingAgent()
+  except Exception as e:
+    state.agent = None
+    print(
+      "Failed to init Foundry agent; grounding disabled",
+      {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id, "error": repr(e)},
+    )
+
+
+async def _agent_answer_or_fallback(*, state: StreamState, rt: AOAIRealtime, transcript: str):
+  """Call Foundry agent (web-grounded) and force the realtime assistant to speak the result.
+
+  On failure/timeout, trigger a non-grounded response with the required prefix.
+  """
+  if not transcript.strip():
+    return
+
+  if not ENABLE_AGENT:
+    return
+
+  # Avoid overlapping agent calls; keep the call responsive.
+  if state.agent_inflight:
+    return
+
+  state.agent_inflight = True
+  state.agent_last_query_ms = _now_ms()
+  await _ensure_agent(state)
+
+  try:
+    agent = state.agent
+    result_text = None
+    if agent is not None:
+      try:
+        result_text = await asyncio.wait_for(
+          agent.run(
+            query=transcript,
+            correlation={"callConnectionId": state.call_connection_id, "correlationId": state.corr_id},
+          ),
+          timeout=max(0.1, AGENT_TIMEOUT_MS / 1000.0),
+        )
+      except Exception:
+        result_text = None
+
+    if result_text and isinstance(result_text, str) and result_text.strip():
+      print(
+        "Foundry grounded answer",
+        {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id, "chars": len(result_text)},
+      )
+      # Force speaking the grounded answer as-is (avoid hallucinating extra details).
+      speak = (
+        "次の回答文を、日本語で自然に読み上げてください。内容は改変せず、そのまま読み上げます。\n\n"
+        + result_text.strip()
+      )
+      state.aoai_inflight = True
+      await rt.create_response(event_id=f"response_grounded_{_now_ms()}", instructions=speak)
+      return
+
+    # Grounding failed: mandatory prefix, then answer from general knowledge.
+    print(
+      "Foundry grounding failed; fallback to general answer",
+      {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id},
+    )
+    fallback_instructions = (
+      f"ユーザーの質問に回答してください。冒頭で必ず『{AGENT_FAILURE_PREFIX}』と一言述べてから、一般知識で回答してください。"
+    )
+    state.aoai_inflight = True
+    await rt.create_response(event_id=f"response_fallback_{_now_ms()}", instructions=fallback_instructions)
+  finally:
+    state.agent_inflight = False
 
 
 async def _aoai_pump(state: StreamState):
@@ -498,6 +654,14 @@ async def _aoai_pump(state: StreamState):
           await _barge_in_cancel(reason="phrase", transcript=tr)
           continue
 
+        # Prefer Foundry Agent grounding when enabled.
+        if tr and ENABLE_AGENT and not state.aoai_inflight:
+          try:
+            asyncio.create_task(_agent_answer_or_fallback(state=state, rt=rt, transcript=tr))
+          except Exception:
+            pass
+          continue
+
         if AOAI_AUTO_CREATE_RESPONSE and not state.aoai_inflight:
           state.aoai_inflight = True
           try:
@@ -550,7 +714,10 @@ async def _aoai_pump(state: StreamState):
       pass
     return
   except Exception as e:
-    print("AOAI pump error", {"callConnectionId": state.call_connection_id, "error": repr(e)})
+    print(
+      "AOAI pump error",
+      {"callConnectionId": state.call_connection_id, "correlationId": state.corr_id, "error": repr(e)},
+    )
 
 
 async def handler(ws):
@@ -620,7 +787,9 @@ async def handler(ws):
         )
 
         if ENABLE_AOAI and aoai_task is None:
-          aoai_task = asyncio.create_task(_connect_aoai(state))
+          # Supervisor keeps reconnecting without dropping the call.
+          state.aoai_supervisor_task = asyncio.create_task(_aoai_supervisor(state))
+          aoai_task = state.aoai_supervisor_task
 
       elif kind == "AudioData":
         ad = obj.get("audioData") or {}
@@ -637,7 +806,9 @@ async def handler(ws):
         if ENABLE_AOAI and state.sample_rate and state.channels in (1, 2):
           # Wait for AOAI connect (best-effort) then forward.
           if aoai_task is None:
-            aoai_task = asyncio.create_task(_connect_aoai(state))
+            state.aoai_supervisor_task = asyncio.create_task(_aoai_supervisor(state))
+            aoai_task = state.aoai_supervisor_task
+          # Non-blocking check.
           try:
             await asyncio.wait_for(state.aoai_ready.wait(), timeout=0.0)
           except Exception:
@@ -645,9 +816,7 @@ async def handler(ws):
 
           rt = state.aoai
           if rt is not None:
-            # Start AOAI event pump once per connection.
-            if state.aoai_pump_task is None:
-              state.aoai_pump_task = asyncio.create_task(_aoai_pump(state))
+            # Pump is owned by supervisor; if absent, it's ok (will start soon).
 
             pcm_mono = pcm
             if state.channels == 2:
@@ -697,6 +866,12 @@ async def handler(ws):
   except Exception as e:
     print("ACS WS error (media)", {"callConnectionId": state.call_connection_id, "error": repr(e)})
   finally:
+    # Signal shutdown to background tasks.
+    try:
+      state.closed.set()
+    except Exception:
+      pass
+
     if aoai_task is not None:
       try:
         aoai_task.cancel()

@@ -1,5 +1,6 @@
 
 import os, time, asyncio, json
+from typing import Literal
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -14,6 +15,12 @@ from azure.communication.callautomation import (
     MediaStreamingAudioChannelType,
   CommunicationUserIdentifier,
 )
+
+try:
+  # Teams interop identifier (Entra ID object ID)
+  from azure.communication.callautomation import MicrosoftTeamsUserIdentifier  # type: ignore
+except Exception:
+  MicrosoftTeamsUserIdentifier = None  # type: ignore
 
 try:
   from azure.communication.callautomation import AudioFormat  # type: ignore
@@ -208,7 +215,7 @@ def _parse_acs_events(body: bytes) -> list[dict]:
       continue
     ev_type = ev.get("type") or ev.get("eventType")
     data = ev.get("data") or {}
-    normalized.append({"type": ev_type, "data": data, "raw": ev})
+    normalized.append({"type": ev_type, "data": data, "id": ev.get("id") or ev.get("eventId"), "raw": ev})
   return normalized
 
 @app.post("/api/incomingCall")
@@ -218,6 +225,27 @@ async def incoming_call_handler(request: Request):
     
     # Parse the incoming event
     events = _parse_acs_events(await request.body())
+
+    # Event Grid subscription validation handshake
+    # https://learn.microsoft.com/azure/event-grid/subscribe-through-putty
+    # Contract: respond with {"validationResponse": "<code>"}
+    for event in events:
+      ev_type = (event.get("type") or "").strip()
+      if ev_type in (
+        "Microsoft.EventGrid.SubscriptionValidationEvent",
+        "SubscriptionValidationEvent",
+      ):
+        data = event.get("data") or {}
+        code = data.get("validationCode") or data.get("validation_code")
+        if isinstance(code, str) and code.strip():
+          print(
+            "EventGrid validation",
+            {"eventId": event.get("id"), "validationCode": "***", "path": "/api/incomingCall"},
+          )
+          return JSONResponse({"validationResponse": code.strip()})
+        # If we can't find the code, return a useful error for diagnostics.
+        return JSONResponse({"error": "SubscriptionValidationEvent missing validationCode"}, status_code=400)
+
     for event in events:
       if event.get("type") == "Microsoft.Communication.IncomingCall":
         incoming_call_context = (event.get("data") or {}).get("incomingCallContext")
@@ -307,7 +335,12 @@ def health():
 
 
 class StartServerCallRequest(BaseModel):
-  targetUserId: str
+  # Fixed contract:
+  # - targetKind=="teams": use entraObjectId (Entra ID objectId)
+  # - targetKind=="acs": use targetUserId (ACS rawId)
+  targetKind: Literal["acs", "teams"] = "acs"
+  targetUserId: str | None = None
+  entraObjectId: str | None = None
   sourceDisplayName: str | None = None
 
 
@@ -323,9 +356,30 @@ async def start_server_call(payload: StartServerCallRequest):
   if not call_automation_client:
     return JSONResponse({"error": "ACS not configured"}, status_code=500)
 
-  target_user_id = (payload.targetUserId or "").strip()
-  if not target_user_id:
-    return JSONResponse({"error": "targetUserId is required"}, status_code=400)
+  target_kind = (payload.targetKind or "acs").strip().lower()
+
+  target = None
+  target_user_id = None
+  entra_object_id = None
+
+  if target_kind == "teams":
+    entra_object_id = (payload.entraObjectId or "").strip()
+    if not entra_object_id:
+      return JSONResponse({"error": "entraObjectId is required when targetKind=teams"}, status_code=400)
+    if MicrosoftTeamsUserIdentifier is None:
+      return JSONResponse(
+        {
+          "error": "MicrosoftTeamsUserIdentifier is not available in the installed azure-communication-callautomation SDK",
+          "hint": "Upgrade azure-communication-callautomation to a version that supports Teams interop identifiers",
+        },
+        status_code=500,
+      )
+    target = MicrosoftTeamsUserIdentifier(entra_object_id)
+  else:
+    target_user_id = (payload.targetUserId or "").strip()
+    if not target_user_id:
+      return JSONResponse({"error": "targetUserId is required when targetKind=acs"}, status_code=400)
+    target = CommunicationUserIdentifier(target_user_id)
 
   try:
     callback_host = _require_callback_uri_host()
@@ -340,13 +394,14 @@ async def start_server_call(payload: StartServerCallRequest):
     )
 
   callback_url = f"{callback_host}/api/callbacks"
-  target = CommunicationUserIdentifier(target_user_id)
   source_display_name = payload.sourceDisplayName or "Realtime Server"
 
   print(
     "create_call:",
     {
+      "targetKind": target_kind,
       "targetUserId": target_user_id,
+      "entraObjectId": entra_object_id,
       "callbackUrl": callback_url,
       "mediaStreamingTransportUrl": _ws_transport_url(),
       "mediaStreaming": {

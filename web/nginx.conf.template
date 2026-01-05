@@ -1,0 +1,66 @@
+worker_processes  auto;
+
+error_log  /dev/stderr info;
+pid        /tmp/nginx.pid;
+
+events {
+  worker_connections  1024;
+}
+
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+
+  access_log  /dev/stdout;
+
+  sendfile        on;
+  keepalive_timeout  65;
+
+  # Write temp files to /tmp for non-root.
+  client_body_temp_path /tmp/client_temp;
+  proxy_temp_path       /tmp/proxy_temp;
+  fastcgi_temp_path     /tmp/fastcgi_temp;
+  uwsgi_temp_path       /tmp/uwsgi_temp;
+  scgi_temp_path        /tmp/scgi_temp;
+
+  server {
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Proxy API to the server (prevents SPA fallback from returning index.html for /api/*).
+    location /api/ {
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+
+      proxy_pass ${API_UPSTREAM};
+    }
+
+    # (Optional) Proxy /ws/* if you need websocket endpoints from the API server.
+    location /ws/ {
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+
+      proxy_pass ${API_UPSTREAM};
+    }
+
+    # SPA fallback
+    location / {
+      try_files $uri $uri/ /index.html;
+    }
+
+    # Cache immutable build assets aggressively
+    location ~* \.(?:js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico)$ {
+      try_files $uri =404;
+      expires 30d;
+      add_header Cache-Control "public, max-age=2592000, immutable";
+    }
+  }
+}

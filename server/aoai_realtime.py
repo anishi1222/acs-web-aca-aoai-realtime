@@ -9,8 +9,10 @@ API_KEY = os.getenv("AZURE_OPENAI_API_KEY")  # PoCはキー、推奨はEntra/MI 
 VOICE = os.getenv("AOAI_VOICE", "sage")
 
 
-_DEFAULT_INSTRUCTIONS = (
-  "あなたは株式会社西友（せいゆう）の日本語音声アシスタントです。常に丁寧語（です・ます調）で応答し、なれなれしい言葉遣い・タメ口・過度なフランク表現は避けてください。ユーザーの発話内容に忠実に回答し、根拠のない推測や断定はしません。最新情報が必要な場合は、参照元（URLや資料）を確認して取得できる場合のみ反映し、取得できない場合は『現時点では確認できません』と明確に伝え、必要なURL/情報の提示をお願いしてください。聞き取れない場合は推測せず、日本語で『恐れ入りますが、もう一度お願いいたします。』と聞き返してください。"
+_DEFAULT_INSTRUCTIONS_PATH = Path(__file__).resolve().parent / "prompts" / "aoai_instructions.txt"
+
+_FALLBACK_INSTRUCTIONS = (
+  "あなたは日本語の音声アシスタントです。常に丁寧語（です・ます調）で応答してください。"
 )
 
 
@@ -20,7 +22,8 @@ def _load_instructions() -> str:
   Precedence:
   1) AOAI_INSTRUCTIONS_FILE (UTF-8 text)
   2) AOAI_INSTRUCTIONS (inline string)
-  3) built-in default
+  3) server/prompts/aoai_instructions.txt (repo default)
+  4) minimal built-in fallback
   """
   path = (os.getenv("AOAI_INSTRUCTIONS_FILE") or "").strip()
   if path:
@@ -40,7 +43,18 @@ def _load_instructions() -> str:
   if inline is not None and inline.strip():
     return inline
 
-  return _DEFAULT_INSTRUCTIONS
+  # Repo default instructions file (used when no env vars are set).
+  try:
+    text = _DEFAULT_INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+  except FileNotFoundError:
+    text = ""
+  except Exception as e:
+    raise RuntimeError(f"Failed to read default instructions file: {_DEFAULT_INSTRUCTIONS_PATH} ({e})")
+
+  if text.strip():
+    return text
+
+  return _FALLBACK_INSTRUCTIONS
 
 def ws_url():
   # Azure OpenAI Realtime WebSocket endpoint [1](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/realtime-audio-websockets)[2](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/realtime-audio-websockets?view=foundry-classic)

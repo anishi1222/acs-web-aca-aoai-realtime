@@ -17,22 +17,24 @@ cp .env.example .env
 
 2. `server/.env` を編集して値を設定
 
-設定する環境変数は以下です：
+設定する環境変数は以下です（`server/.env` は `KEY=value` 形式）：
 
-```bash
-export AZURE_COMMUNICATION_CONNECTION_STRING=<ACSの接続文字列>
-export AZURE_OPENAI_ENDPOINT=<AOAIのEndpoint【例】wss://xxx.openai.azure.com>
-export AZURE_OPENAI_DEPLOYMENT=<AOAIのデプロイメント名【例】gpt-realtime>
-export AZURE_OPENAI_API_KEY=<AOAIのAPIキー。Entra ID認証実行時には不要>
-export AOAI_VOICE=<応答に使う音声。現在sageを指定>
+```dotenv
+AZURE_COMMUNICATION_CONNECTION_STRING=<ACSの接続文字列>
+AZURE_OPENAI_ENDPOINT=<AOAIのEndpoint【例】wss://xxx.openai.azure.com>
+AZURE_OPENAI_DEPLOYMENT=<AOAIのデプロイメント名【例】gpt-realtime>
+AZURE_OPENAI_API_KEY=<AOAIのAPIキー。Entra ID認証実行時には不要>
+AOAI_VOICE=<応答に使う音声。現在sageを指定>
 
 # （任意）AOAI の system prompt / instructions（長い場合はファイル推奨）
-# export AOAI_INSTRUCTIONS_FILE=./prompts/aoai_instructions.txt
-# export AOAI_INSTRUCTIONS="あなたは..."
-export CALLBACK_URI_HOST=<サーバーのパブリックURL【例】https://my-server.com>
+# AOAI_INSTRUCTIONS_FILE=./prompts/aoai_instructions.txt
+# AOAI_INSTRUCTIONS=あなたは...
+
+# サーバーのパブリックURL（ACS から到達できる必要あり）
+CALLBACK_URI_HOST=https://my-server.example
 
 # （任意）音質改善: リサンプリング品質 (soxr)
-export MEDIA_WS_SOXR_QUALITY=VHQ
+MEDIA_WS_SOXR_QUALITY=VHQ
 ```
 
 注意:
@@ -145,65 +147,36 @@ python server/scripts/ws_probe.py --url https://<public-host> --path /ws/media
 
 ```bash
 ./startup_server.sh
-
 ```
 
 これで **トンネル公開は 8000 だけ**で済みます。
 
 補足: 依存関係は `uv` がある場合は `uv sync --frozen`、無い場合は `pip install -r server/requirements.txt` で導入します（起動スクリプト内で自動判定）。
 
-## 2. ACSのUserの作成
+## 3 検証: Server が先に発信 → ブラウザで着信 Accept
 
-[エンド ユーザーのアクセス トークンを作成および管理する](https://learn.microsoft.com/ja-jp/azure/communication-services/quickstarts/identity/access-tokens?tabs=linux&pivots=platform-azcli)
+Web UI から自分の `userId` を作って、サーバーに「自分へ発信」させる方式で検証できます。
+この方式で、ACS + Media Streaming の経路を確認できます（ただし **公開URLは必須**です）。
 
-事前に環境変数でACS接続文字列を設定しておく。
-
-1. ID の作成
-
-```bash
-# 接続文字列を設定済みなら、 --connection-string 以後は不要
-az communication identity user create --connection-string "<yourConnectionString>"
-```
-
-応答は以下のよう。
-
-```json
-{
-  "properties": {
-    "id": "8:acs:5f6d34d4-dad2-48b1-bad6-30e9cc12bcc8_0000002c-0e29-50fd-72e4-6f8ded7cbc42"
-  },
-  "rawId": "8:acs:5f6d34d4-dad2-48b1-bad6-30e9cc12bcc8_0000002c-0e29-50fd-72e4-6f8ded7cbc42"
-}
-```
-
-2. アクセストークンを発行 (今回は不要)
-
-```bash
-# 接続文字列を設定済みなら、 --connection-string 以後は不要
-az communication identity token issue --scope voip --connection-string "yourConnectionString"
-```
-
-応答は以下のよう。
-
-```json
-{
-  "expires_on": "2025-12-31T08:02:49.1509468+00:00",
-  "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjAxOUQzMTYyMzQ0RTQ4REEwNUU1OUQxMzYwNkYwQkFDRjU4QTQwRUMiLCJ4NXQiOiJBWjB4WWpST1NOb0Y1WjBUWUc4THJQV0tRT3ciLCJ0eXAiOiJKV1QifQ.eyJza3lwZWlkIjoiYWNzOjVmNmQzNGQ0LWRhZDItNDhiMS1iYWQ2LTMwZTljYzEyYmNjOF8wMDAwMDAyYy0wZTI5LTljYjYtMmRlNi02ZjhkZWQ3YzFjNTciLCJzY3AiOjE3OTIsImNzaSI6IjE3NjcwODE3NjkiLCJleHAiOjE3NjcxNjgxNjksInJnbiI6ImFtZXIiLCJhY3NTY29wZSI6InZvaXAiLCJyZXNvdXJjZUlkIjoiNWY2ZDM0ZDQtZGFkMi00OGIxLWJhZDYtMzBlOWNjMTJiY2M4IiwicmVzb3VyY2VMb2NhdGlvbiI6InVuaXRlZHN0YXRlcyIsImlhdCI6MTc2NzA4MTc2OX0.YZwxA-SwlOqOFUxkgbwpYB6zfRSumcNFxYa_D1nu7lZzVqcajq4A6UyLKTW2fUUusfmdd0ugDCwrjMjaWs7d9HSzygIlmuU_pR5FTlG34_phD36pIm7sLC0D-P3rRGIbzuz69w_2u6-zk_fjaqaALXVpo9eT8za0pcRCC5hhM9FMiOncxHDddQHbs50jp85GJKKUv-Ti2PW3DW1cxJtVf88MEuMw7SsbIrjO5f1umiAyWiNoQPc7iG7ocHlx8W33b6vZ77i40f-i9sVx3KB143sZhSeOuKkrOLr83Ol51Y3IBc41jHgkl3NjcBqcQ6pPWBv8b-j2e9TCGm_BHlJKbQ",
-  "user_id": "8:acs:5f6d34d4-dad2-48b1-bad6-30e9cc12bcc8_0000002c-0e29-9cb6-2de6-6f8ded7c1c57"
-}
-```
-
-## 3-a （おすすめ）ローカル検証: Server が先に発信 → ブラウザで着信 Accept
-
-Event Grid の IncomingCall ルーティングが用意できない/面倒な場合は、Web UI から自分の `userId` を作って、サーバーに「自分へ発信」させる方式で検証できます。
-この方式だと、Bot ID の事前準備や `/api/incomingCall` への Event Grid ルーティング無しで、ACS + Media Streaming の経路を確認できます（ただし **公開URLは必須**です）。
+  > ※ Web UI はローカル検証（Server Start→Accept）のみ対応しています。
 
 ### 1. サーバーを起動（`CALLBACK_URI_HOST` は上記の通り公開URLにする）
+
+> このプロジェクトの `server/` は **Python 3.12 以上が前提**です（`server/pyproject.toml` の `requires-python = ">=3.12"`）。
+> ローカルに Python 3.12 が無い場合は、`uv` を使うのが簡単です（`uv venv --python 3.12`）。
 
 ### 2. `startup_server.sh` を実行
 
 ```bash
 ./startup_server.sh
+```
+
+補足：手元の `python3` が 3.9 でも、`startup_server.sh` は `server/.venv/bin/python`（3.12）で起動します。
+
+ローカルの静的チェックを 3.12 でやる場合：
+
+```bash
+cd server && ./.venv/bin/python -m compileall -q .
 ```
 
 ### 3. `startup_web.sh` を実行
@@ -212,76 +185,79 @@ Event Grid の IncomingCall ルーティングが用意できない/面倒な場
 ./startup_web.sh
 ```
 
+### （補足）localhost ではなくローカル IP で Web UI を開く
+
+別PC/スマホ等から同一LAN内で Web UI を開きたい場合、`http://localhost:5173` ではなく
+`http://<このPCのIP>:5173`（例: `http://172.16.0.10:5173`）でアクセスします。
+
+ポイントは2つです。
+
+1) Vite 開発サーバーを LAN から見えるように起動する
+
+`startup_web.sh` は通常どおり使えますが、Vite は既定で localhost バインドのことがあるため、
+必要に応じて `--host 0.0.0.0` を付けて起動してください。
+
+```bash
+cd web
+npm run dev -- --host 0.0.0.0 --port 5173
+```
+
+その後、別端末のブラウザで `http://<このPCのIP>:5173` を開きます。
+
+2) `/api/token` が失敗する場合は「API の向き先」を確認する
+
+このリポジトリは Vite の proxy により、Web UI からの `/api/*` アクセスを
+同じPC上の `http://localhost:8000`（サーバー）へ中継します。
+
+- Web UI を `http://<このPCのIP>:5173` で開く場合も、基本は **`VITE_API_BASE` を未設定**にして
+  **Vite proxy 経由**で `/api/token` を呼ぶのが安全です（CORS 回避）。
+- もし `web/.env.local` 等で `VITE_API_BASE=http://localhost:8000` を設定していると、
+  **別端末からアクセスした場合に「別端末自身の localhost」** を参照してしまい `token error` になります。
+  この場合は `VITE_API_BASE` を削除するか、どうしても直指定したい場合は
+  `VITE_API_BASE=http://<このPCのIP>:8000` にしてください。
+
+注意: `VITE_API_BASE` で別オリジン（例: `http://<IP>:8000`）へ直接アクセスする場合、
+ブラウザの CORS 制約により FastAPI 側に CORS 設定が必要になることがあります。
+ローカル検証では **Vite proxy を使う（= `VITE_API_BASE` 未設定）** のが一番トラブルが少ないです。
+
+補足（重要）:
+- ここで説明している「ローカルIPで UI を開く」は、あくまで **LAN内のブラウザ表示**の話です。
+  ACS の Callback / Media Streaming は Azure から到達できる必要があるため、
+  `CALLBACK_URI_HOST` は引き続き `devtunnel/ngrok/cloudflared` などで作った **https の公開URL**を使ってください。
+
 ### 4. UI を開く
 
-- ブラウザで http://localhost:5173 を開く
+- ブラウザで http://localhost:5173 を開き、一番下の【ローカル検証】をクリックする。これにより、ユーザーIDが自動生成される。右上の【idle】【Call: idle】を確認する。
 
 ![alt text](image1.png)
 
-### 5. User IDの指定
+### 5. 初期化
 
-1. 【Target Identity】に、相手もしくはBotのIDを指定し、【Start Call】を選択する。
+- 【Init (Token)】をクリックして、ACS User IDを自動発行させる。クリックすると、IDが現れ、【Server Start】のボタンがクリックできるようになる。右上の【agent ready】も確認しておく。
 
-![alt text](image6.png)
+![alt text](image2.png)
 
-2. 右上の【Init (Token)】をクリックする。これにより、ユーザーIDが自動生成される。右上の【agent ready】を確認する。
+### 6. サーバーの開始
 
-  ![alt text](image3.png)
+- 【Server Start】をクリックして、PythonベースのサーバーからACSに接続する。右上の【server started call】と右下の【Incoming: ringing】を確認する。
 
-### 6. 【Server Start】をクリックしてACSと接続、通話を開始する。
-
-1. 【Server Start】をクリックする。これにより、右上の【server started call】と右下の【Incoming: ringing】を確認する。
-
-![alt text](image4.png)
+![alt text](image3.png)
 
 > ⚠ 【Incoming: ringing】に遷移しない場合は、再度【Server Start】をクリックすると遷移します。
 
-2. 【Accept】をクリックしてACSと接続、通話を開始する。
+### 7. 通話開始
+
+- 【Accept】をクリックしてACSと接続、通話を開始する。
+- 最初はブラウザからマイク利用の許可を尋ねてくるので許可が必要。これでAI音声が返ってくるはず。
+
+![alt text](image4.png)
+
+### 8. 通話終了
+
+- 【Hang Up】をクリックすると、通話を終了できる。
+- 通話が終了すると、右上のステータスが【stopped】【Call: Disconnected】に変わり、右下の着信ステータスは【Incoming: none】に変わる。
 
 ![alt text](image5.png)
-
-### 7. 実際に発話する。
-
-- 最初はブラウザからマイク利用の許可を尋ねてきますので、許可してください。これでAI音声が返ってくるはず。
-
-## 3-b 指定したユーザーへ発信
-
-- サーバーや別の相手に対して通話する場合です（現在動作しません）。
-
-### 1. サーバーを起動（`CALLBACK_URI_HOST` は上記の通り公開URLにする）
-
-### 2. `startup_server.sh` を実行
-
-```bash
-./startup_server.sh
-```
-
-### 3. `startup_web.sh` を実行
-
-```bash
-./startup_web.sh
-```
-
-### 4. UI を開く
-
-- ブラウザで http://localhost:5173 を開く
-
-![alt text](image1.png)
-
-### 5. サーバーBot ID/ACS User IDを使う
-
-
-3. 実際に発話してください。最初はブラウザからマイク利用の許可を尋ねてきますので、許可してください。
-
-これでAI音声が返ってくるはず。
-  Target Identity に通話先の ACS Identity (User ID または Bot ID) を入力
-   - サーバー側で ACS Call Automation が待ち受けている Identity を指定します。
-   - 事前に ACS リソース側で Event Grid 等を使用し、Incoming Call イベントがサーバーの `/api/incomingCall` にルーティングされるよう設定が必要です。
-
-3. [Start Call] を押し、通話が開始されることを確認
-  - 右上に [connected]
-  - [Start Call] のすぐ下に [Call: Connected]
-
 
 ## 4. Web UI を Docker イメージで起動 (non-root)
 
@@ -289,20 +265,29 @@ Event Grid の IncomingCall ルーティングが用意できない/面倒な場
 
 ```bash
 cd web
-docker build -t aoai-realtime-web:nonroot .
-docker run --rm -p 8080:8080 aoai-realtime-web:nonroot
+# 方式A（推奨）: nginx が /api/* をリバースプロキシします（同一オリジン扱いになり CORS 回避）
+docker build -t acs-aoai-realtime-web:nonroot .
+
+# Linux の場合 host.docker.internal が無いので host-gateway を追加します
+docker run --rm -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e API_UPSTREAM=http://host.docker.internal:8000 \
+  acs-aoai-realtime-web:nonroot
+
+# 方式B（任意）: API を別オリジン（例: http://localhost:8000）で叩く場合は build 時に VITE_API_BASE を埋め込みます
+# docker build --build-arg VITE_API_BASE=http://localhost:8000 -t acs-aoai-realtime-web:nonroot .
 ```
 
 - ブラウザ: `http://localhost:8080/`
-- Target Identity に通話先の ACS Identity を入力
 
-## 4. Server を Docker イメージで起動（non-root）
+
+## 5. Server を Docker イメージで起動（non-root）
 
 `server/` の Dockerfile は non-root ユーザーで FastAPI(Uvicorn) を起動する
 
 ```bash
 cd server
-docker build -t aoai-realtime-server:nonroot .
+docker build -t acs-aoai-realtime-server:nonroot .
 
 # 必要な環境変数を渡して起動（値は自分の環境に合わせて設定）
 docker run --rm -p 8000:8000 \
@@ -312,19 +297,9 @@ docker run --rm -p 8000:8000 \
   -e AZURE_OPENAI_API_KEY=... \
   -e AOAI_VOICE=... \
   -e CALLBACK_URI_HOST=... \
-  aoai-realtime-server:nonroot
+  -e CORS_ALLOW_ORIGINS=http://localhost:8080,http://127.0.0.1:8080 \
+  acs-aoai-realtime-server:nonroot
 ```
 
-## 5. ACAで動作
-
-- 各Dockerイメージを各ACAで利用
-  - ingress、listening portを間違えないように
-
-    | Server/Client | Port number/protocol  |
-    |--------------|-------------:|
-    | UI (node.js) | 8080/tcp    |
-    | server (Python) | 8000/tcp    |
-
-- UI (JavaScript)、server (Python) とも、パブリックアクセスを許可、もしくはVNET内からのアクセスを許可する
-  - WebSocket over TLS (wss://) のため、はACAアプリ名のみを使ったアクセスはできない
-  - VNET内に閉じたアクセスの場合、Private DNS zoneを構成する必要がある
+注意:
+- README やシェル履歴に **接続文字列/キーを貼り付けない**でください。漏洩した可能性がある場合は必ずキーをローテーションしてください。

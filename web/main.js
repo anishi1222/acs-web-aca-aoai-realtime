@@ -7,6 +7,7 @@ let call;
 let isCallConnected = false;
 let incomingCall;
 let currentUserId;
+let deviceManager;
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -15,14 +16,41 @@ async function apiFetch(path, options) {
   return fetch(url, options);
 }
 
+async function apiJson(path, options) {
+  const response = await apiFetch(path, options);
+  const contentType = response.headers.get("content-type") || "";
+
+  let payload;
+  if (contentType.includes("application/json")) {
+    payload = await response.json().catch(() => null);
+  } else {
+    payload = await response.text().catch(() => "");
+  }
+
+  if (!response.ok) {
+    const serverError = payload && typeof payload === "object" ? payload.error : null;
+    const serverDetails = payload && typeof payload === "object" ? payload.details : null;
+    const fallback = typeof payload === "string" && payload ? payload : `HTTP ${response.status}`;
+    const message = serverError ? String(serverError) : fallback;
+    const detailSuffix = serverDetails ? ` (${serverDetails})` : "";
+    throw new Error(`${message}${detailSuffix}`);
+  }
+
+  // Guard against SPA fallback (e.g., nginx serving index.html for /api/*).
+  if (!contentType.includes("application/json") || !payload || typeof payload !== "object") {
+    throw new Error(
+      "API returned non-JSON. If you are using the Dockerized web container, set VITE_API_BASE at build time (or add a reverse proxy for /api)."
+    );
+  }
+  return payload;
+}
+
 const statusEl = document.getElementById("status");
 const statusDot = document.getElementById("statusDot");
 const wsStateEl = document.getElementById("wsState"); // Reusing this element for Call state
-const btnCall = document.getElementById("btnCall");
 const btnHangup = document.getElementById("btnHangup");
 const btnSupplement = document.getElementById("btnSupplement");
 const supplementText = document.getElementById("supplementText");
-const calleeIdInput = document.getElementById("calleeId");
 
 const myUserIdInput = document.getElementById("myUserId");
 const btnInit = document.getElementById("btnInit");
@@ -52,15 +80,24 @@ async function initCallAgent() {
 
   try {
     setStatus("fetching token...", "warn");
-    const response = await apiFetch("/api/token");
-    if (!response.ok) throw new Error("Failed to fetch token");
-    const data = await response.json();
+    const data = await apiJson("/api/token");
+
+    if (!data.token || !data.userId) {
+      throw new Error("Invalid /api/token response (missing token/userId)");
+    }
 
     currentUserId = data.userId;
     if (myUserIdInput) myUserIdInput.value = currentUserId;
     
     const credential = new AzureCommunicationTokenCredential(data.token);
     callClient = new CallClient();
+    deviceManager = await callClient.getDeviceManager();
+    try {
+      // Without this, the call can connect but the user may not be able to speak.
+      await deviceManager.askDevicePermission({ audio: true });
+    } catch (e) {
+      console.warn("Mic permission not granted", e);
+    }
     callAgent = await callClient.createCallAgent(credential, { displayName: "Web Client" });
 
     callAgent.on("incomingCall", (args) => {
@@ -72,7 +109,9 @@ async function initCallAgent() {
     setStatus("agent ready", "ok");
   } catch (error) {
     console.error(error);
-    setStatus("token error", "bad");
+    const msg = String(error?.message || error);
+    const isNetworkish = /Failed to fetch|NetworkError|ECONNREFUSED/i.test(msg);
+    setStatus(isNetworkish ? "token error: API unreachable (start server on :8000)" : `token error: ${msg}`, "bad");
     throw error;
   }
 }
@@ -84,6 +123,7 @@ async function acceptIncoming() {
   }
   try {
     setStatus("accepting...", "warn");
+    // Best-effort: accept with audio enabled.
     call = await incomingCall.accept();
     incomingCall = null;
     if (btnAccept) btnAccept.disabled = true;
@@ -94,13 +134,19 @@ async function acceptIncoming() {
       if (call.state === "Connected") {
         setStatus("connected", "ok");
         isCallConnected = true;
-        btnCall.disabled = true;
+        try {
+          // Ensure we are not muted on connect.
+          if (typeof call.isMuted === "boolean" ? call.isMuted : false) {
+            call.unmute();
+          }
+        } catch {
+          // Ignore if not supported.
+        }
         btnHangup.disabled = false;
         if (btnServerCall) btnServerCall.disabled = true;
       } else if (call.state === "Disconnected") {
         setStatus("disconnected", "warn");
         isCallConnected = false;
-        btnCall.disabled = false;
         btnHangup.disabled = true;
         if (btnServerCall) btnServerCall.disabled = false;
         call = null;
@@ -141,70 +187,18 @@ async function serverStartCall() {
   }
 }
 
-async function startCall() {
-  const calleeId = calleeIdInput.value.trim();
-  if (!calleeId) {
-    alert("Please enter a Target Identity");
-    return;
-  }
-
-  try {
-    await initCallAgent();
-    
-    setStatus("calling...", "warn");
-    
-    // Determine if it's a User or Bot ID based on format (simple heuristic)
-    // 8:acs:... is usually a user. 
-    // But for simplicity, we'll try to parse it or just use communicationUserId.
-    // If the user inputs a raw ID, we wrap it.
-    
-    let target;
-    if (calleeId.startsWith("8:acs:")) {
-        target = { communicationUserId: calleeId };
-    } else {
-        // Fallback or other types. 
-        target = { communicationUserId: calleeId };
-    }
-
-    call = callAgent.startCall([target]);
-    
-    call.on("stateChanged", () => {
-      setCallState(call.state);
-      if (call.state === "Connected") {
-        setStatus("connected", "ok");
-        isCallConnected = true;
-        btnCall.disabled = true;
-        btnHangup.disabled = false;
-      } else if (call.state === "Disconnected") {
-        setStatus("disconnected", "warn");
-        isCallConnected = false;
-        btnCall.disabled = false;
-        btnHangup.disabled = true;
-        call = null;
-      }
-    });
-
-  } catch (error) {
-    console.error(error);
-    setStatus("call failed", "bad");
-  }
-}
-
 async function hangUp() {
   if (call) {
     await call.hangUp();
     call = null;
   }
   isCallConnected = false;
-  btnCall.disabled = false;
   btnHangup.disabled = true;
   if (btnServerCall) btnServerCall.disabled = false;
   if (btnAccept) btnAccept.disabled = true;
   setIncomingState("none");
   setStatus("stopped", "warn");
 }
-
-btnCall.onclick = startCall;
 btnHangup.onclick = hangUp;
 
 if (btnInit) {

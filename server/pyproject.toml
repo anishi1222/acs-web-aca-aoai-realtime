@@ -40,7 +40,7 @@ dependencies = [
     "starlette==0.41.3",
     "typing-extensions==4.15.0",
     "typing-inspection==0.4.2",
-    "urllib3==2.6.2",
+    "urllib3==2.6.3",
     "uvicorn[standard]==0.32.1",
     "uvloop==0.22.1",
     "watchfiles==1.1.1",

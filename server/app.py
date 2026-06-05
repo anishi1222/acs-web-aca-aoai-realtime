@@ -361,7 +361,8 @@ async def start_server_call(payload: StartServerCallRequest):
       media_streaming=media_streaming_options,
     )
   except Exception as e:
-    return JSONResponse({"error": f"create_call failed: {e}"}, status_code=500)
+    logging.exception("create_call failed")
+    return JSONResponse({"error": "create_call failed"}, status_code=500)
 
   call_connection_id = getattr(result, "call_connection_id", None) or getattr(result, "callConnectionId", None)
   server_call_id = getattr(result, "server_call_id", None) or getattr(result, "serverCallId", None)

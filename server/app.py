@@ -325,10 +325,11 @@ async def start_server_call(payload: StartServerCallRequest):
   try:
     callback_host = _require_callback_uri_host()
     media_streaming_options = _media_streaming_options()
-  except Exception as e:
+  except Exception:
+    logging.exception("Failed to prepare callback host or media streaming options")
     return JSONResponse(
       {
-        "error": str(e),
+        "error": "Failed to initialize call settings",
         "hint": "ローカル実行時は ngrok / cloudflared 等で https:// の公開URLを作り、CALLBACK_URI_HOST に設定してください",
       },
       status_code=500,

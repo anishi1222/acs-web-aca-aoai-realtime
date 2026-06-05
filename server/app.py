@@ -1,4 +1,5 @@
 import os, asyncio, json
+import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ except Exception:
   AudioFormat = None  # type: ignore
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
 # CORS
 # - Needed when serving the web UI from a different origin (e.g. Docker nginx :8080)
@@ -395,6 +397,7 @@ def token():
     user = identity_client.create_user()
     tok = identity_client.get_token(user, scopes=["voip"])
   except ClientAuthenticationError as e:
+    logger.warning("ACS authentication failed while issuing token", exc_info=True)
     # Common causes:
     # - Connection string is wrong (wrong resource / rotated key)
     # - The ACS resource is deleted or not accessible
@@ -403,7 +406,6 @@ def token():
     return JSONResponse(
       {
         "error": "ACS 認証に失敗しました (Denied)",
-        "details": str(e),
         "acsConnectionString": sanity,
         "hint": (
           "AZURE_COMMUNICATION_CONNECTION_STRING が正しい ACS リソースの接続文字列か確認してください。"
@@ -414,8 +416,9 @@ def token():
       status_code=401,
     )
   except Exception as e:
+    logger.exception("Unexpected error while issuing ACS token")
     return JSONResponse(
-      {"error": "ACS トークン発行に失敗しました", "details": str(e)},
+      {"error": "ACS トークン発行に失敗しました"},
       status_code=500,
     )
 

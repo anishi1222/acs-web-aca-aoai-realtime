@@ -180,15 +180,15 @@ wheels = [
 
 [[package]]
 name = "azure-communication-identity"
-version = "1.4.0"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-core" },
     { name = "msrest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1a/0a/b7e6bf222902425a5f75b179ccab3267e3e22c8a740867d375bb13d22552/azure-communication-identity-1.4.0.tar.gz", hash = "sha256:081d59482cd8a25c0792ef624d8c4dc76ebc82a2eb95552f25dffb9cf8060b27", size = 66258, upload-time = "2023-11-30T15:15:07.363Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/9e/6cbc94f5c01406083960bea219ee9d9313ad925c894b6b5df3df1d3d51a0/azure-communication-identity-1.5.0.tar.gz", hash = "sha256:d3186403395b78066ff30313ac119693694d2da9e0c76e9ac70eaa590dcb29e8", size = 66685, upload-time = "2024-02-15T08:20:04.324Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/41/a876cd022a0b0ebbab910354ab164f2cade21f2e5501936bbef909870343/azure_communication_identity-1.4.0-py3-none-any.whl", hash = "sha256:85af4de20a443272c562cef6f972cad20f317c4c2bf7e67f1694253d07728e6f", size = 65552, upload-time = "2023-11-30T15:15:09.39Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/21/9266411a36a182e235ad9ed338a071e417d01d6804747ae959c2232399b0/azure_communication_identity-1.5.0-py3-none-any.whl", hash = "sha256:dd6dc7aafc9f3707ffbbf40a45f2b4ccb5dc67f4d1545e74b083f83f9afa7a1a", size = 65601, upload-time = "2024-02-15T08:20:06.825Z" },
 ]
 
 [[package]]
@@ -1146,7 +1146,7 @@ requires-dist = [
     { name = "annotated-types", specifier = "==0.7.0" },
     { name = "anyio", specifier = "==4.12.0" },
     { name = "azure-communication-callautomation", specifier = "==1.5.0" },
-    { name = "azure-communication-identity", specifier = "==1.4.0" },
+    { name = "azure-communication-identity", specifier = "==1.5.0" },
     { name = "azure-core", specifier = "==1.38.0" },
     { name = "azure-identity", specifier = "==1.19.0" },
     { name = "certifi", specifier = "==2025.11.12" },

@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173"
   },
   "dependencies": {
-    "@azure/communication-calling": "^1.40.1",
+    "@azure/communication-calling": "^1.43.1",
     "@azure/communication-common": "^2.4.0"
   },
   "devDependencies": {

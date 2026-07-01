@@ -166,16 +166,16 @@ wheels = [
 
 [[package]]
 name = "azure-communication-callautomation"
-version = "1.5.0"
+version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-core" },
     { name = "isodate" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ab/0a/92abae9910a3fc6b52b0e900728dc25b0ba230934b243125a5c775e53f0d/azure_communication_callautomation-1.5.0.tar.gz", hash = "sha256:0ecce73791f061a1b6d351ff151a71ee1a9ddd4cf64fd0725cf15c94f6186779", size = 145748, upload-time = "2025-09-10T20:26:24.693Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/47/2a57f7824b890d121f0dbfa686035e68eff1e496f95a78a2c581cfc84fcb/azure_communication_callautomation-1.6.0.tar.gz", hash = "sha256:f35e376931a767aecb0ab64247a1d36e770e3627372fda2762184a9ca2ca0aa3", size = 157928, upload-time = "2026-06-24T22:47:14.466Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/a4/26654151bccba19f1d192d7540d8a209993aa363bd08a01ed1e7d32af4aa/azure_communication_callautomation-1.5.0-py3-none-any.whl", hash = "sha256:4d0926c1b3dc1650adf0b249ef7c5d1cfe0c01b98acef978470ce429bcddc41d", size = 142661, upload-time = "2025-09-10T20:26:25.912Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/28/989f609cb8d4f0cfad3737c215b7758b7e0985839584827ec188ac19736f/azure_communication_callautomation-1.6.0-py3-none-any.whl", hash = "sha256:30be12903438768087032a4a7603278d22fb7d6537a20826a66b1a09c51fee6b", size = 149005, upload-time = "2026-06-24T22:47:16.246Z" },
 ]
 
 [[package]]
@@ -1161,7 +1161,7 @@ requires-dist = [
     { name = "aiohttp", specifier = "==3.14.1" },
     { name = "annotated-types", specifier = "==0.7.0" },
     { name = "anyio", specifier = "==4.14.0" },
-    { name = "azure-communication-callautomation", specifier = "==1.5.0" },
+    { name = "azure-communication-callautomation", specifier = "==1.6.0" },
     { name = "azure-communication-identity", specifier = "==1.5.0" },
     { name = "azure-core", specifier = "==1.41.0" },
     { name = "azure-identity", specifier = "==1.19.0" },

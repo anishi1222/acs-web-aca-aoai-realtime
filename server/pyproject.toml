@@ -16,7 +16,7 @@ dependencies = [
     "cffi==2.1.1",
     "charset-normalizer==3.5.1",
     "click==8.4.2",
-    "cryptography==50.0.0",
+    "cryptography==50.0.1",
     "fastapi==0.141.1",
     "h11==0.16.0",
     "httptools==0.8.0",

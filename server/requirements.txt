@@ -34,7 +34,7 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic-core==2.41.5
 pyjwt==2.15.0
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 pyyaml==6.0.3
 requests==2.34.2
 requests-oauthlib==2.0.0

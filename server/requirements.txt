@@ -30,7 +30,7 @@ multidict==7.0.0
 numpy==2.5.4
 oauthlib==4.0.0
 propcache==0.5.4
-pycparser==3.0
+pycparser==3.12
 pydantic==2.12.5
 pydantic-core==2.41.5
 pyjwt==2.15.1

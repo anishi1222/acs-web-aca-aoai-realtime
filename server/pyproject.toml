@@ -11,7 +11,7 @@ dependencies = [
     "azure-communication-callautomation==1.6.1",
     "azure-communication-identity==1.5.0",
     "azure-core==1.41.0",
-    "azure-identity==1.26.0",
+    "azure-identity==1.27.0",
     "certifi==2026.10.23",
     "cffi==2.1.1",
     "charset-normalizer==3.5.2",
